@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Museu Virtual 3D — WebGL2</title>
+  <style>
+    /* ====================================================================
+       Estilos do OVERLAY (HTML/CSS por cima do canvas). O desenho 3D e 100%
+       WebGL2; estes elementos sao apenas a interface (titulo, instrucoes, HUD).
+       ==================================================================== */
+    :root {
+      --panel-bg: rgba(15, 16, 24, 0.55);
+      --panel-border: rgba(255, 255, 255, 0.14);
+      --accent: #ffce6b;
+      --text: #f3f3f7;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #0a0a0f; }
+    body { font-family: system-ui, "Segoe UI", Roboto, sans-serif; color: var(--text); }
+
+    /* O canvas ocupa a tela toda; serve so para o contexto WebGL2. */
+    #glcanvas { display: block; width: 100vw; height: 100vh; cursor: pointer; }
+    body.locked #glcanvas { cursor: none; }
+
+    /* Painel de titulo + instrucoes (canto superior esquerdo). */
+    #overlay {
+      position: fixed; top: 18px; left: 18px; max-width: 320px;
+      padding: 16px 18px; border-radius: 14px;
+      background: var(--panel-bg); border: 1px solid var(--panel-border);
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+      user-select: none;
+    }
+    #overlay h1 { margin: 0 0 2px; font-size: 20px; letter-spacing: .3px; }
+    #overlay h1 span { color: var(--accent); }
+    #overlay .sub { margin: 0 0 12px; font-size: 12px; opacity: .8; }
+    #overlay .controls { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 13px; }
+    #overlay kbd {
+      background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.18);
+      border-bottom-width: 2px; border-radius: 6px; padding: 1px 7px; font-size: 12px;
+      font-family: ui-monospace, monospace; white-space: nowrap;
+    }
+
+    /* HUD (canto superior direito): fase do dia. */
+    #hud {
+      position: fixed; top: 18px; right: 18px; padding: 10px 14px; border-radius: 12px;
+      background: var(--panel-bg); border: 1px solid var(--panel-border);
+      backdrop-filter: blur(6px); font-size: 13px; user-select: none;
+    }
+    #hud b { color: var(--accent); }
+
+    /* Aviso central "clique para entrar" — some quando o Pointer Lock ativa. */
+    #hint {
+      position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      padding: 14px 22px; border-radius: 999px; font-size: 15px; text-align: center;
+      background: rgba(15,16,24,0.7); border: 1px solid var(--panel-border);
+      backdrop-filter: blur(6px); user-select: none; pointer-events: none;
+      transition: opacity .25s;
+    }
+    body.locked #hint { opacity: 0; }
+
+    /* Mira (so aparece com o cursor travado). */
+    #crosshair {
+      position: fixed; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px;
+      border-radius: 50%; background: rgba(255,255,255,0.85); opacity: 0; pointer-events: none;
+    }
+    body.locked #crosshair { opacity: .9; }
+
+    /* Caixa de erro (oculta por padrao). */
+    #error {
+      display: none; position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%);
+      max-width: 80%; padding: 18px 22px; border-radius: 12px; font-size: 14px;
+      background: #3a1414; border: 1px solid #7a2a2a; color: #ffd9d9; white-space: pre-wrap;
+    }
+    .credit { position: fixed; bottom: 14px; left: 18px; font-size: 11px; opacity: .55; user-select: none; }
+  </style>
+</head>
+<body>
+  <!-- Unico canvas: apenas para obter o contexto WebGL2. Todo o desenho e WebGL. -->
+  <canvas id="glcanvas"></canvas>
+
+  <!-- ===== OVERLAY (interface) ===== -->
+  <div id="overlay">
+    <h1>Museu <span>Virtual 3D</span></h1>
+    <p class="sub">Passeio em 1ª pessoa por um pátio de esculturas ao entardecer — WebGL2 puro.</p>
+    <div class="controls">
+      <kbd>W</kbd><span>Andar para frente (ou ↑)</span>
+      <kbd>S</kbd><span>Andar para trás (ou ↓)</span>
+      <kbd>A / D</kbd><span>Andar para os lados (ou ← →)</span>
+      <kbd>Shift</kbd><span>Correr</span>
+      <kbd>Mouse</kbd><span>Olhar ao redor</span>
+      <kbd>ESC</kbd><span>Liberar o cursor</span>
+    </div>
+  </div>
+
+  <div id="hud">Céu: <b id="timeofday">Dia</b></div>
+  <div id="hint">Clique na cena para entrar e olhar com o mouse</div>
+  <div id="crosshair"></div>
+  <div id="error"></div>
+  <div class="credit">Computação Gráfica · WebGL2 + GLSL 300 es · geometria e texturas procedurais</div>
+
+  <!-- ES modules, sem build: basta servir por HTTP. -->
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
