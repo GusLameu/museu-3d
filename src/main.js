@@ -9,7 +9,7 @@ import { createProgramInfo, fetchText, resizeCanvasToDisplaySize } from "./gl-ut
 import { Camera } from "./camera.js";
 import { Input } from "./input.js";
 import { createScene, SCENE_BOUNDS } from "./scene.js";
-import { mat3 } from "../libs/gl-matrix/index.js";
+import { mat3, mat4, vec4 } from "../libs/gl-matrix/index.js";
 
 // Uniforms usados pelo shader Phong (resolvidos uma vez em createProgramInfo).
 const UNIFORMS = [
@@ -63,9 +63,30 @@ async function main() {
     }
     const { program, uniforms: U } = programInfo;
 
-    // Camera em 1a pessoa (levemente inclinada para enquadrar a escultura central).
-    const camera = new Camera([0, 2.2, 9], -90, -6);
-    const input = new Input(canvas, camera, SCENE_BOUNDS);
+    // --- STATE MACHINE ---
+    const STATE = { MENU: 0, PLAYING: 1, INSTRUCTIONS: 2 };
+    let gameState = STATE.MENU;
+
+    function setState(newState) {
+        gameState = newState;
+        const menuEl = document.getElementById("menu");
+        const instrEl = document.getElementById("instructions");
+
+        menuEl.classList.toggle("hidden", newState !== STATE.MENU);
+        instrEl.classList.toggle("visible", newState === STATE.INSTRUCTIONS);
+
+        if (newState === STATE.PLAYING) {
+            canvas.requestPointerLock();
+        } else if (document.pointerLockElement === canvas) {
+            document.exitPointerLock();
+        }
+    }
+
+    // Camera em 1a pessoa — spawn na frente do museu (fora, norte).
+    const camera = new Camera([0, 2.2, -15], 90, -4);
+    const input = new Input(canvas, camera, SCENE_BOUNDS, () => {
+        if (gameState !== STATE.MENU) setState(STATE.MENU);
+    });
 
     // Hook simples para depuracao no console do navegador (ex.: window.museu.camera).
     window.museu = { camera, scene, input };
@@ -74,8 +95,18 @@ async function main() {
     gl.useProgram(program);
     gl.uniform1i(U.uTexture, 0);
 
+    // Botões do menu.
+    document.getElementById("btn-start").addEventListener("click", () => setState(STATE.PLAYING));
+    document.getElementById("btn-instructions").addEventListener("click", () => setState(STATE.INSTRUCTIONS));
+    document.getElementById("btn-close-instructions").addEventListener("click", () => setState(STATE.MENU));
+
     // Elementos de HUD opcionais.
     const clockEl = document.getElementById("timeofday");
+    const speechEl = document.getElementById("speech-bubble");
+
+    // Posição do guarda (deve bater com scene.js).
+    const GUARD_WORLD = vec4.fromValues(3.25, 4.0, -14.5, 1);
+    const tmpV4 = vec4.create(), tmpM4 = mat4.create();
 
     // --- LOOP ---
     const nm3 = mat3.create(); // matriz normal reutilizada
@@ -91,10 +122,14 @@ async function main() {
             gl.viewport(0, 0, canvas.width, canvas.height);
         }
 
-        // Atualiza Sol + animacoes + camera.
+        // Atualiza Sol + animacoes sempre (cena roda em background).
         scene.update(time, dt);
-        input.update(dt);
-        document.body.classList.toggle("locked", input.locked);
+
+        // Input e controle do jogador apenas no estado PLAYING.
+        if (gameState === STATE.PLAYING) {
+            input.update(dt);
+        }
+        document.body.classList.toggle("locked", input.locked && gameState === STATE.PLAYING);
 
         // Limpa usando a cor do ceu (muda com o ciclo do dia).
         const sky = scene.sun.skyColor;
@@ -135,6 +170,20 @@ async function main() {
             const e = scene.sun.elevation;
             clockEl.textContent = e > 0.35 ? "Dia" : e > -0.05 ? "Entardecer" : "Noite";
         }
+
+        // Balão de fala: projeta posição 3D do guarda para coordenadas da tela.
+        if (speechEl && gameState === STATE.PLAYING) {
+            mat4.multiply(tmpM4, camera.getProjectionMatrix(aspect), camera.getViewMatrix());
+            vec4.transformMat4(tmpV4, GUARD_WORLD, tmpM4);
+            if (tmpV4[3] > 0.01) {
+                const nx = tmpV4[0] / tmpV4[3], ny = tmpV4[1] / tmpV4[3];
+                if (nx > -1.2 && nx < 1.2 && ny > -1.2 && ny < 1.2) {
+                    speechEl.style.display = "block";
+                    speechEl.style.left = ((nx + 1) * 0.5 * canvas.width) + "px";
+                    speechEl.style.top = ((1 - ny) * 0.5 * canvas.height - 16) + "px";
+                } else { speechEl.style.display = "none"; }
+            } else { speechEl.style.display = "none"; }
+        } else if (speechEl) { speechEl.style.display = "none"; }
 
         requestAnimationFrame(frame);
     }

@@ -23,24 +23,51 @@
     #glcanvas { display: block; width: 100vw; height: 100vh; cursor: pointer; }
     body.locked #glcanvas { cursor: none; }
 
-    /* Painel de titulo + instrucoes (canto superior esquerdo). */
-    #overlay {
-      position: fixed; top: 18px; left: 18px; max-width: 320px;
-      padding: 16px 18px; border-radius: 14px;
-      background: var(--panel-bg); border: 1px solid var(--panel-border);
-      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-      box-shadow: 0 8px 30px rgba(0,0,0,0.35);
-      user-select: none;
+    /* ===== MENU PRINCIPAL (tela cheia, centralizado) ===== */
+    #menu {
+      position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: rgba(10, 10, 15, 0.95); backdrop-filter: blur(8px); z-index: 10;
+      transition: opacity 0.3s, visibility 0.3s;
     }
-    #overlay h1 { margin: 0 0 2px; font-size: 20px; letter-spacing: .3px; }
-    #overlay h1 span { color: var(--accent); }
-    #overlay .sub { margin: 0 0 12px; font-size: 12px; opacity: .8; }
-    #overlay .controls { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 13px; }
-    #overlay kbd {
+    #menu.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+    #menu h1 { margin: 0 0 8px; font-size: 48px; letter-spacing: 2px; background: linear-gradient(90deg, var(--text), var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    #menu .subtitle { margin: 0 0 40px; font-size: 16px; opacity: 0.7; }
+    #menu .btns { display: flex; flex-direction: column; gap: 16px; min-width: 260px; }
+    #menu button {
+      padding: 14px 28px; font-size: 16px; font-weight: 600; letter-spacing: 0.5px;
+      background: linear-gradient(135deg, rgba(255,206,107,0.15), rgba(255,206,107,0.05));
+      border: 1px solid var(--accent); color: var(--accent); border-radius: 10px;
+      cursor: pointer; transition: all 0.2s; font-family: inherit;
+    }
+    #menu button:hover { background: var(--accent); color: #0a0a0f; box-shadow: 0 0 20px rgba(255,206,107,0.4); }
+    #menu button:focus { outline: none; box-shadow: 0 0 0 3px rgba(255,206,107,0.5); }
+
+    /* ===== PAINEL DE INSTRUÇÕES (modal) ===== */
+    #instructions {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: rgba(10, 10, 15, 0.92); backdrop-filter: blur(8px); z-index: 10;
+      opacity: 0; visibility: hidden; transition: opacity 0.3s, visibility 0.3s;
+    }
+    #instructions.visible { opacity: 1; visibility: visible; }
+    #instructions .panel {
+      max-width: 480px; width: 90%; padding: 32px; border-radius: 16px;
+      background: var(--panel-bg); border: 1px solid var(--panel-border);
+      box-shadow: 0 16px 48px rgba(0,0,0,0.5); transform: scale(0.95); transition: transform 0.3s;
+    }
+    #instructions.visible .panel { transform: scale(1); }
+    #instructions h2 { margin: 0 0 24px; font-size: 28px; text-align: center; color: var(--accent); }
+    #instructions .controls { display: grid; grid-template-columns: auto 1fr; gap: 10px 16px; font-size: 14px; margin-bottom: 24px; }
+    #instructions kbd {
       background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.18);
-      border-bottom-width: 2px; border-radius: 6px; padding: 1px 7px; font-size: 12px;
+      border-bottom-width: 2px; border-radius: 6px; padding: 4px 10px; font-size: 13px;
       font-family: ui-monospace, monospace; white-space: nowrap;
     }
+    #instructions .close-btn {
+      display: block; width: 100%; padding: 12px; font-size: 15px; font-weight: 600;
+      background: var(--accent); border: none; color: #0a0a0f; border-radius: 8px;
+      cursor: pointer; transition: all 0.2s; font-family: inherit;
+    }
+    #instructions .close-btn:hover { box-shadow: 0 0 20px rgba(255,206,107,0.5); }
 
     /* HUD (canto superior direito): fase do dia. */
     #hud {
@@ -74,29 +101,62 @@
       background: #3a1414; border: 1px solid #7a2a2a; color: #ffd9d9; white-space: pre-wrap;
     }
     .credit { position: fixed; bottom: 14px; left: 18px; font-size: 11px; opacity: .55; user-select: none; }
+
+    /* ===== Balão de fala do guarda ===== */
+    #speech-bubble {
+      position: fixed; z-index: 5; pointer-events: none; display: none;
+      transform: translate(-50%, -100%); padding-bottom: 8px;
+    }
+    #speech-bubble .content {
+      background: rgba(255,255,255,0.93); color: #1a1a2e;
+      padding: 8px 18px; border-radius: 14px; font-size: 15px; font-weight: 600;
+      white-space: nowrap; box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+      text-align: center;
+    }
+    #speech-bubble .tail {
+      width: 0; height: 0;
+      border-left: 8px solid transparent; border-right: 8px solid transparent;
+      border-top: 10px solid rgba(255,255,255,0.93); margin: 0 auto;
+    }
   </style>
 </head>
 <body>
   <!-- Unico canvas: apenas para obter o contexto WebGL2. Todo o desenho e WebGL. -->
   <canvas id="glcanvas"></canvas>
 
-  <!-- ===== OVERLAY (interface) ===== -->
-  <div id="overlay">
+  <!-- ===== MENU PRINCIPAL ===== -->
+  <div id="menu">
     <h1>Museu <span>Virtual 3D</span></h1>
-    <p class="sub">Passeio em 1ª pessoa por um pátio de esculturas ao entardecer — WebGL2 puro.</p>
-    <div class="controls">
-      <kbd>W</kbd><span>Andar para frente (ou ↑)</span>
-      <kbd>S</kbd><span>Andar para trás (ou ↓)</span>
-      <kbd>A / D</kbd><span>Andar para os lados (ou ← →)</span>
-      <kbd>Shift</kbd><span>Correr</span>
-      <kbd>Mouse</kbd><span>Olhar ao redor</span>
-      <kbd>ESC</kbd><span>Liberar o cursor</span>
+    <p class="subtitle">Passeio em 1ª pessoa por um pátio de esculturas ao entardecer — WebGL2 puro</p>
+    <div class="btns">
+      <button id="btn-start">Iniciar</button>
+      <button id="btn-instructions">Instruções</button>
     </div>
   </div>
 
-  <div id="hud">Céu: <b id="timeofday">Dia</b></div>
+  <!-- ===== INSTRUÇÕES (modal) ===== -->
+  <div id="instructions">
+    <div class="panel">
+      <h2>Controles</h2>
+      <div class="controls">
+        <kbd>W</kbd> / <kbd>↑</kbd><span>Andar para frente</span>
+        <kbd>S</kbd> / <kbd>↓</kbd><span>Andar para trás</span>
+        <kbd>A</kbd> / <kbd>D</kbd> / <kbd>←</kbd> / <kbd>→</kbd><span>Andar para os lados</span>
+        <kbd>Shift</kbd><span>Correr</span>
+        <kbd>Mouse</kbd><span>Olhar ao redor</span>
+        <kbd>ESC</kbd><span>Pausar / Voltar ao menu</span>
+      </div>
+      <button class="close-btn" id="btn-close-instructions">Entendido</button>
+    </div>
+  </div>
+
+  <!-- ===== HUD IN-GAME (canto superior direito: fase do dia) ===== -->
   <div id="hint">Clique na cena para entrar e olhar com o mouse</div>
   <div id="crosshair"></div>
+  <div id="speech-bubble">
+    <div class="content">Olá, pode entrar!</div>
+    <div class="tail"></div>
+  </div>
   <div id="error"></div>
   <div class="credit">Computação Gráfica · WebGL2 + GLSL 300 es · geometria e texturas procedurais</div>
 

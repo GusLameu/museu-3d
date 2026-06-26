@@ -16,13 +16,15 @@ export class Input {
      * @param {HTMLCanvasElement} canvas elemento que recebe o Pointer Lock
      * @param {import('./camera.js').Camera} camera camera controlada
      * @param {{minX:number,maxX:number,minZ:number,maxZ:number}} bounds limites do salao (colisao simples)
+     * @param {()=>void} onUnlock callback quando o Pointer Lock for perdido (ESC)
      */
-    constructor(canvas, camera, bounds) {
+    constructor(canvas, camera, bounds, onUnlock) {
         this.canvas = canvas;
         this.camera = camera;
         this.bounds = bounds;
         this.keys = new Set();   // teclas pressionadas no momento
         this.locked = false;     // Pointer Lock ativo?
+        this.onUnlock = onUnlock || (() => {});
 
         this._initKeyboard();
         this._initMouse();
@@ -40,13 +42,10 @@ export class Input {
     }
 
     _initMouse() {
-        // Clicar no canvas pede o Pointer Lock (esconde e "prende" o cursor).
-        this.canvas.addEventListener("click", () => {
-            if (!this.locked) this.canvas.requestPointerLock();
-        });
         // Atualiza o estado de trava quando o navegador confirma a mudanca.
         document.addEventListener("pointerlockchange", () => {
             this.locked = document.pointerLockElement === this.canvas;
+            if (!this.locked) this.onUnlock();
         });
         // So giramos a camera quando o Pointer Lock esta ativo (movimentos relativos).
         document.addEventListener("mousemove", (e) => {
