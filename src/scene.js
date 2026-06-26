@@ -14,7 +14,7 @@
 // ============================================================================
 import { mat4 } from "../libs/gl-matrix/index.js";
 import { Mesh } from "./mesh.js";
-import { loadTexture } from "./texture.js";
+import { loadTexture, createVideoTexture } from "./texture.js";
 import { Sun } from "./light.js";
 import {
     createPlane, createQuad, createBox, createSphere, createCylinder, createTorus,
@@ -40,6 +40,11 @@ export const SCENE_BOUNDS = {
     minZ: -FLOOR_D / 2 - 4, maxZ: FLOOR_D / 2 - 1.5,
 };
 
+// Posição do guarda (reutilizada pelo balão de fala em main.js).
+const _halfEntry = ENTRANCE_W / 2;
+const _NZ = -FLOOR_D / 2;
+export const GUARD_POS = { x: _halfEntry + 1.5, y: 1.9, z: _NZ - 1.5, scaleY: 3.6 };
+
 // Cores de moldura reutilizadas.
 const FRAME_DARK = [0.14, 0.09, 0.05];
 const FRAME_GOLD = [0.55, 0.42, 0.16];
@@ -60,18 +65,18 @@ function makeModel(position, euler = [0, 0, 0], scale = [1, 1, 1]) {
  * @param {WebGL2RenderingContext} gl
  * @returns {{objects:Array, sun:Sun, update:(time:number,dt:number)=>void}}
  */
-export function createScene(gl) {
+export function createScene(gl, mode = "padrão") {
     // ---------------------------------------------------------------------
     // 1) MALHAS (criadas uma vez e reaproveitadas por varios objetos)
     // ---------------------------------------------------------------------
     const meshes = {
-        floor: new Mesh(gl, createPlane(FLOOR_W, FLOOR_D, 8)),       // ladrilho 8x
-        marbleStrip: new Mesh(gl, createPlane(11, 8, 3)),           // faixa central de marmore
+        floor: new Mesh(gl, createPlane(FLOOR_W, FLOOR_D, 8)),
+        marbleStrip: new Mesh(gl, createPlane(11, 8, 3)),
         wallNS: new Mesh(gl, createQuad(1, 1, FLOOR_W / 3.5, WALL_H / 3.5)),
         wallNSLeft: new Mesh(gl, createQuad(1, 1, northSegW / 3.5, WALL_H / 3.5)),
         wallNSRight: new Mesh(gl, createQuad(1, 1, northSegW / 3.5, WALL_H / 3.5)),
         wallEW: new Mesh(gl, createQuad(1, 1, FLOOR_D / 3.5, WALL_H / 3.5)),
-        canvas: new Mesh(gl, createQuad(1, 1)),                      // tela do quadro
+        canvas: new Mesh(gl, createQuad(1, 1)),
         box: new Mesh(gl, createBox(1, 1, 1)),
         sphere: new Mesh(gl, createSphere(1, 32, 32)),
         sunSphere: new Mesh(gl, createSphere(1, 24, 24)),
@@ -94,9 +99,9 @@ export function createScene(gl) {
     };
 
     const objects = [];
-    const animated = []; // objetos com update() (animacao por transformacao)
+    const animated = [];
+    let videoUpdate = null;
 
-    // pequeno helper para adicionar objetos com valores-padrao de material
     function add(o) {
         const obj = {
             mesh: o.mesh,
@@ -115,14 +120,35 @@ export function createScene(gl) {
     }
 
     // ---------------------------------------------------------------------
-    // 3) CHAO (madeira) + faixa central de MARMORE  -> objetos TEXTURIZADOS
+    // 3) CHAO (madeira) — sempre presente
     // ---------------------------------------------------------------------
     add({ mesh: meshes.floor, position: [0, 0, 0], texture: tex.wood, shininess: 24, specularStrength: 0.12 });
+    // Calçada externa (cinza) na frente do museu
+    add({ mesh: meshes.box, position: [0, -0.005, _NZ - 2], scale: [FLOOR_W + 4, 0.01, 4], color: [0.38, 0.38, 0.40], shininess: 40, specularStrength: 0.2 });
+
+    // =====================================================================
+    // MODO GATINHOS! — prepara textura de video para os pedestais
+    // =====================================================================
+    let vt = null;
+    if (mode === "GATINHOS!") {
+        const video = document.getElementById("catvideo");
+        if (video) {
+            const src = video.src.split("?")[0];
+            video.src = src + "?t=" + Date.now();
+            video.load();
+            video.currentTime = 0;
+            video.play().catch(() => { });
+        }
+        vt = createVideoTexture(gl, video);
+        videoUpdate = vt.update;
+    }
+
+    // =====================================================================
+    // CENA NORMAL — todos os modos (padrão, dia, noite, GATINHOS!)
+    // GATINHOS! difere apenas nas esculturas dos pedestais dos cantos
+    // =====================================================================
     add({ mesh: meshes.marbleStrip, position: [0, 0.02, 0], texture: tex.marble, shininess: 80, specularStrength: 0.45 });
 
-    // ---------------------------------------------------------------------
-    // 4) PAREDES (reboco texturizado) — patio aberto, sem teto
-    // ---------------------------------------------------------------------
     const wallMat = { shininess: 8, specularStrength: 0.05, texture: tex.wall };
     add({ mesh: meshes.wallNSLeft, position: [leftWallCenter, WALL_H / 2, -FLOOR_D / 2], euler: [0, 0, 0], scale: [northSegW, WALL_H, 1], ...wallMat });
     add({ mesh: meshes.wallNSRight, position: [rightWallCenter, WALL_H / 2, -FLOOR_D / 2], euler: [0, 0, 0], scale: [northSegW, WALL_H, 1], ...wallMat });
@@ -251,38 +277,56 @@ export function createScene(gl) {
         color: STONE, shininess: 16, specularStrength: 0.12,
     });
 
-    // Canto 1: CUBO girando (objeto ANIMADO).
+    // Helper: cria um billboard de video no topo de um pedestal
+    function addCat(p, sx, sy) {
+        add({
+            mesh: meshes.canvas, position: p, scale: [sx, sy, 1],
+            texture: vt.texture, shininess: 8, specularStrength: 0.05,
+            update(_t, _dt, obj) {
+                const cam = window.museu.camera;
+                obj.modelMatrix = makeModel(p, [0, Math.atan2(cam.position[0] - p[0], cam.position[2] - p[2]), 0], [sx, sy, 1]);
+            },
+        });
+    }
+
+    // Canto 1
     pedestal(-9, -6);
-    add({
+    if (mode === "GATINHOS!") addCat([-9, 1.9, -6], 2.5, 2.5);
+    else add({
         mesh: meshes.box, position: [-9, 1.9, -6], scale: [0.8, 0.8, 0.8],
         color: [0.82, 0.16, 0.16], shininess: 32, specularStrength: 0.4,
         update(t, _dt, obj) { obj.modelMatrix = makeModel([-9, 1.9, -6], [0, t * 0.8, 0], [0.8, 0.8, 0.8]); },
     });
 
-    // Canto 2: ESFERA dourada (COR SOLIDA, especular forte que segue o Sol).
+    // Canto 2
     pedestal(9, -6);
-    add({
+    if (mode === "GATINHOS!") addCat([9, 2.05, -6], 2.5, 2.5);
+    else add({
         mesh: meshes.sphere, position: [9, 2.05, -6], scale: [0.55, 0.55, 0.55],
         color: [0.86, 0.66, 0.22], shininess: 128, specularStrength: 0.95,
     });
 
-    // Canto 3: ANEL + CUBO (substitui troféu, versões menores no canto).
+    // Canto 3
     pedestal(-9, 6);
-    const cY = 1.5; // topo do pedestal do canto
-    add({
-        mesh: meshes.torus, position: [-9, cY + 0.55, 6], euler: [Math.PI / 2, 0, 0], scale: [0.45, 0.45, 0.45],
-        color: [0.95, 0.72, 0.25], shininess: 140, specularStrength: 1.0,
-        update(t, _dt, obj) { obj.modelMatrix = makeModel([-9, cY + 0.55, 6], [Math.PI / 2, 0, t * 0.7], [0.45, 0.45, 0.45]); },
-    });
-    add({
-        mesh: meshes.box, position: [-9, cY + 0.55, 6], scale: [0.25, 0.25, 0.25],
-        color: [0.10, 0.70, 0.30], shininess: 80, specularStrength: 0.6,
-        update(t, _dt, obj) { obj.modelMatrix = makeModel([-9, cY + 0.55, 6], [t * 1.4, t * 1.1, t * 0.6], [0.25, 0.25, 0.25]); },
-    });
+    if (mode === "GATINHOS!") addCat([-9, 2.05, 6], 2.5, 2.5);
+    else {
+        const cY = 1.5;
+        add({
+            mesh: meshes.torus, position: [-9, cY + 0.55, 6], euler: [Math.PI / 2, 0, 0], scale: [0.45, 0.45, 0.45],
+            color: [0.95, 0.72, 0.25], shininess: 140, specularStrength: 1.0,
+            update(t, _dt, obj) { obj.modelMatrix = makeModel([-9, cY + 0.55, 6], [Math.PI / 2, 0, t * 0.7], [0.45, 0.45, 0.45]); },
+        });
+        add({
+            mesh: meshes.box, position: [-9, cY + 0.55, 6], scale: [0.25, 0.25, 0.25],
+            color: [0.10, 0.70, 0.30], shininess: 80, specularStrength: 0.6,
+            update(t, _dt, obj) { obj.modelMatrix = makeModel([-9, cY + 0.55, 6], [t * 1.4, t * 1.1, t * 0.6], [0.25, 0.25, 0.25]); },
+        });
+    }
 
-    // Canto 4: TORUS laranja tombando (objeto ANIMADO).
+    // Canto 4
     pedestal(9, 6);
-    add({
+    if (mode === "GATINHOS!") addCat([9, 2.0, 6], 2.5, 2.5);
+    else add({
         mesh: meshes.torusSmall, position: [9, 2.0, 6], scale: [0.5, 0.5, 0.5],
         color: [0.92, 0.50, 0.10], shininess: 96, specularStrength: 0.7,
         update(t, _dt, obj) { obj.modelMatrix = makeModel([9, 2.0, 6], [t * 1.0, t * 0.4, 0], [0.5, 0.5, 0.5]); },
@@ -314,18 +358,20 @@ export function createScene(gl) {
     // --- Placa no pedestal (texto renderizado em canvas 2D) ---
     const plaqueTex = (() => {
         const c = document.createElement("canvas");
-        c.width = 512; c.height = 96;
+        c.width = 512; c.height = 160;
         const ctx = c.getContext("2d");
         ctx.fillStyle = "#c49a3c";
         ctx.fillRect(0, 0, c.width, c.height);
         ctx.strokeStyle = "#7a5c1a";
-        ctx.lineWidth = 4;
-        ctx.strokeRect(4, 4, c.width - 8, c.height - 8);
+        ctx.lineWidth = 5;
+        ctx.strokeRect(6, 6, c.width - 12, c.height - 12);
         ctx.fillStyle = "#1a1000";
-        ctx.font = "bold 28px system-ui, 'Segoe UI', sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText("melhor jogo 2d de Similação", c.width / 2, c.height / 2);
+        ctx.font = "bold 34px system-ui, 'Segoe UI', sans-serif";
+        ctx.fillText("melhor jogo 2d de Simulação", c.width / 2, 52);
+        ctx.font = "bold 28px system-ui, 'Segoe UI', sans-serif";
+        ctx.fillText("Pescaria-cg", c.width / 2, 114);
         const tex = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, tex);
         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
@@ -338,7 +384,7 @@ export function createScene(gl) {
         return tex;
     })();
     add({
-        mesh: meshes.canvas, position: [0, 1.1, -0.91], euler: [0, Math.PI, 0], scale: [0.6, 0.12, 1],
+        mesh: meshes.canvas, position: [0, 1.35, -0.91], euler: [0, Math.PI, 0], scale: [0.85, 0.22, 1],
         texture: plaqueTex, shininess: 40, specularStrength: 0.4,
     });
 
@@ -346,11 +392,34 @@ export function createScene(gl) {
     // 9) O SOL — esfera EMISSIVA que segue a luz pontual animada
     // ---------------------------------------------------------------------
     const sun = new Sun();
-    const sunObj = add({
+
+    // Congela o Sol em dia ou noite conforme o modo
+    if (mode === "somente dia") {
+        const orig = sun.update.bind(sun);
+        sun.update = () => orig(4);
+    } else if (mode === "somente noite") {
+        const orig = sun.update.bind(sun);
+        sun.update = () => orig(22);
+    } else if (mode === "GATINHOS!") {
+        const orig = sun.update.bind(sun);
+        sun.update = () => {
+            orig(4); // iluminação de dia (tudo visível)
+            const t = performance.now() / 1000;
+            // Luz colorida de balada — cicla RGB suavemente
+            sun.lightColor[0] = (Math.sin(t * 2.5) * 0.5 + 0.5) * 2.2;
+            sun.lightColor[1] = (Math.sin(t * 2.5 + 2.094) * 0.5 + 0.5) * 2.2;
+            sun.lightColor[2] = (Math.sin(t * 2.5 + 4.188) * 0.5 + 0.5) * 2.2;
+            // Ambiente mais escuro com tom noturno/azulado
+            sun.ambient[0] = 0.10;
+            sun.ambient[1] = 0.10;
+            sun.ambient[2] = 0.20;
+        };
+    }
+
+    add({
         mesh: meshes.sunSphere, position: [0, 50, 0], scale: [2.4, 2.4, 2.4],
         color: [1, 1, 1], emissive: true,
         update(_t, _dt, obj) {
-            // segue a posicao da luz e adota a cor do disco do Sol
             obj.modelMatrix = makeModel([sun.position[0], sun.position[1], sun.position[2]], [0, 0, 0], [2.4, 2.4, 2.4]);
             obj.color = sun.emissiveColor;
         },
@@ -364,5 +433,5 @@ export function createScene(gl) {
         for (const obj of animated) obj.update(time, dt, obj);
     }
 
-    return { objects, sun, update };
+    return { objects, sun, update, videoUpdate };
 }

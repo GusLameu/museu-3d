@@ -8,7 +8,7 @@
 import { createProgramInfo, fetchText, resizeCanvasToDisplaySize } from "./gl-utils.js";
 import { Camera } from "./camera.js";
 import { Input } from "./input.js";
-import { createScene, SCENE_BOUNDS } from "./scene.js";
+import { createScene, SCENE_BOUNDS, GUARD_POS } from "./scene.js";
 import { mat3, mat4, vec4 } from "../libs/gl-matrix/index.js";
 
 // Uniforms usados pelo shader Phong (resolvidos uma vez em createProgramInfo).
@@ -52,11 +52,18 @@ async function main() {
         return;
     }
 
+    // Modo de jogo (vem da URL, ex.: ?mode=GATINHOS!)
+    const mode = new URLSearchParams(location.search).get("mode") || "padrão";
+
+    // Sincroniza o radio button do menu com o modo atual
+    const modeRadio = document.querySelector(`input[name="mode"][value="${mode}"]`);
+    if (modeRadio) modeRadio.checked = true;
+
     // Programa Phong + cena.
     let programInfo, scene;
     try {
         programInfo = createProgramInfo(gl, vertSrc, fragSrc, UNIFORMS);
-        scene = createScene(gl);
+        scene = createScene(gl, mode);
     } catch (e) {
         showFatal("Erro ao iniciar a cena: " + e.message);
         return;
@@ -96,16 +103,25 @@ async function main() {
     gl.uniform1i(U.uTexture, 0);
 
     // Botões do menu.
-    document.getElementById("btn-start").addEventListener("click", () => setState(STATE.PLAYING));
+    document.getElementById("btn-start").addEventListener("click", () => {
+        const selectedMode = document.querySelector('input[name="mode"]:checked').value;
+        if (selectedMode !== mode) {
+            location.search = "?mode=" + encodeURIComponent(selectedMode);
+            return;
+        }
+        // Força o video a tocar no GATINHOS! (precisa de interação do usuário)
+        if (selectedMode === "GATINHOS!") {
+            const v = document.getElementById("catvideo");
+            if (v && v.paused) v.play().catch(() => {});
+        }
+        setState(STATE.PLAYING);
+    });
     document.getElementById("btn-instructions").addEventListener("click", () => setState(STATE.INSTRUCTIONS));
     document.getElementById("btn-close-instructions").addEventListener("click", () => setState(STATE.MENU));
 
     // Elementos de HUD opcionais.
     const clockEl = document.getElementById("timeofday");
     const speechEl = document.getElementById("speech-bubble");
-
-    // Posição do guarda (deve bater com scene.js).
-    const GUARD_WORLD = vec4.fromValues(3.25, 4.0, -14.5, 1);
     const tmpV4 = vec4.create(), tmpM4 = mat4.create();
 
     // --- LOOP ---
@@ -124,6 +140,9 @@ async function main() {
 
         // Atualiza Sol + animacoes sempre (cena roda em background).
         scene.update(time, dt);
+
+        // Se o modo usa video (GATINHOS!), envia o quadro atual para a GPU
+        if (scene.videoUpdate) scene.videoUpdate();
 
         // Input e controle do jogador apenas no estado PLAYING.
         if (gameState === STATE.PLAYING) {
@@ -171,16 +190,17 @@ async function main() {
             clockEl.textContent = e > 0.35 ? "Dia" : e > -0.05 ? "Entardecer" : "Noite";
         }
 
-        // Balão de fala: projeta posição 3D do guarda para coordenadas da tela.
+        // Balão de fala: projeta a cabeça do guarda (y + scaleY/2) para coordenadas da tela.
         if (speechEl && gameState === STATE.PLAYING) {
+            const guardHead = vec4.fromValues(GUARD_POS.x, GUARD_POS.y + GUARD_POS.scaleY * 0.45, GUARD_POS.z, 1);
             mat4.multiply(tmpM4, camera.getProjectionMatrix(aspect), camera.getViewMatrix());
-            vec4.transformMat4(tmpV4, GUARD_WORLD, tmpM4);
+            vec4.transformMat4(tmpV4, guardHead, tmpM4);
             if (tmpV4[3] > 0.01) {
                 const nx = tmpV4[0] / tmpV4[3], ny = tmpV4[1] / tmpV4[3];
                 if (nx > -1.2 && nx < 1.2 && ny > -1.2 && ny < 1.2) {
                     speechEl.style.display = "block";
                     speechEl.style.left = ((nx + 1) * 0.5 * canvas.width) + "px";
-                    speechEl.style.top = ((1 - ny) * 0.5 * canvas.height - 16) + "px";
+                    speechEl.style.top = ((1 - ny) * 0.5 * canvas.height) + "px";
                 } else { speechEl.style.display = "none"; }
             } else { speechEl.style.display = "none"; }
         } else if (speechEl) { speechEl.style.display = "none"; }

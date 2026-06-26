@@ -42,6 +42,23 @@
     #menu button:hover { background: var(--accent); color: #0a0a0f; box-shadow: 0 0 20px rgba(255,206,107,0.4); }
     #menu button:focus { outline: none; box-shadow: 0 0 0 3px rgba(255,206,107,0.5); }
 
+    /* ===== SELEÇÃO DE MODO ===== */
+    #menu .mode-select { margin: 20px 0 8px; text-align: center; }
+    #menu .mode-select p { margin: 0 0 10px; font-size: 13px; opacity: 0.6; letter-spacing: 0.5px; }
+    #menu .mode-select label {
+      display: inline-block; margin: 4px 6px; padding: 6px 14px; font-size: 13px; font-weight: 500;
+      border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); cursor: pointer;
+      transition: all 0.15s; user-select: none;
+    }
+    #menu .mode-select label:hover { border-color: var(--accent); background: rgba(255,206,107,0.08); }
+    #menu .mode-select input[type="radio"] { display: none; }
+    #menu .mode-select input[type="radio"]:checked + span { color: var(--accent); }
+    #menu .mode-select label:has(input:checked) { border-color: var(--accent); background: rgba(255,206,107,0.12); }
+    #menu .mode-select .gatos-label { border-color: rgba(255,100,200,0.3); }
+    #menu .mode-select label.gatos-label:hover { border-color: #ff64c8; background: rgba(255,100,200,0.10); }
+    #menu .mode-select label:has(.gatos:checked) { border-color: #ff64c8; background: rgba(255,100,200,0.15); }
+    #menu .mode-select .gatos:checked + span { color: #ff64c8; }
+
     /* ===== PAINEL DE INSTRUÇÕES (modal) ===== */
     #instructions {
       position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
@@ -131,6 +148,13 @@
     <div class="btns">
       <button id="btn-start">Iniciar</button>
       <button id="btn-instructions">Instruções</button>
+      <div class="mode-select">
+        <p>— MODO DE JOGO —</p>
+        <label><input type="radio" name="mode" value="padrão" checked><span>Padrão</span></label>
+        <label><input type="radio" name="mode" value="somente dia"><span>Somente Dia</span></label>
+        <label><input type="radio" name="mode" value="somente noite"><span>Somente Noite</span></label>
+        <label class="gatos-label"><input type="radio" name="mode" value="GATINHOS!" class="gatos"><span>GATINHOS!</span></label>
+      </div>
     </div>
   </div>
 
