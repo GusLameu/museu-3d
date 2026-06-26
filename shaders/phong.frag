@@ -35,8 +35,16 @@ out vec4 fragColor;
 const float ATTENUATION_K = 0.00035;
 
 void main() {
-    // 1) Cor base: textura OU cor solida.
-    vec3 baseColor = (uUseTexture == 1) ? texture(uTexture, vUv).rgb : uColor;
+    // 1) Cor base: textura OU cor solida. Texturas com transparencia (ex.: o
+    //    SEGURANCA recortado em PNG) descartam os fragmentos quase invisiveis.
+    vec3 baseColor;
+    if (uUseTexture == 1) {
+        vec4 texel = texture(uTexture, vUv);
+        if (texel.a < 0.35) discard;   // recorte (alpha test)
+        baseColor = texel.rgb;
+    } else {
+        baseColor = uColor;
+    }
 
     // 2) Objetos emissivos (a esfera do Sol) brilham sozinhos — saem sem iluminacao.
     if (uEmissive > 0.5) {

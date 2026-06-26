@@ -79,3 +79,30 @@ export function loadTexture(gl, url, options = {}) {
 
     return tex;
 }
+
+/**
+ * Cria uma textura alimentada por um elemento <video> do HTML. A cada frame
+ * chamamos update(), que reenvia o quadro atual do video para a GPU com
+ * texImage2D — tecnica de WebGL2 puro (nada de bibliotecas de video/3D).
+ * Como o tamanho do video normalmente nao e potencia de dois (NPOT), usamos
+ * CLAMP_TO_EDGE + LINEAR e NAO geramos mipmaps.
+ * @param {WebGL2RenderingContext} gl
+ * @param {HTMLVideoElement} video
+ * @returns {{ texture: WebGLTexture, update: () => void }}
+ */
+export function createVideoTexture(gl, video) {
+    // placeholder escuro (1x1) ate o primeiro quadro estar disponivel
+    const texture = createDataTexture(gl, 1, 1, new Uint8Array([18, 18, 26, 255]), false);
+
+    function update() {
+        // HAVE_CURRENT_DATA: ha pelo menos um quadro decodificado para mostrar.
+        if (video && video.readyState >= 2 && video.videoWidth > 0) {
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); // restaura estado global
+        }
+    }
+
+    return { texture, update };
+}

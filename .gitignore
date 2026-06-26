@@ -27,3 +27,7 @@ temp/
 # ===== Observação =====
 # As texturas em assets/textures/ e a lib em libs/gl-matrix/ DEVEM ser versionadas
 # (fazem parte do projeto e são necessárias para rodar). Não as ignore.
+
+# ===== Projeto / Artefatos =====
+*/slides/
+VIDEO_ROTEIRO.md

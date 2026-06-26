@@ -100,6 +100,12 @@
   <div id="error"></div>
   <div class="credit">Computação Gráfica · WebGL2 + GLSL 300 es · geometria e texturas procedurais</div>
 
+  <!-- Video usado como TEXTURA num dos quadros (sem som = "muted"). Fica oculto;
+       cada frame e enviado a GPU via texImage2D (WebGL2 puro). loop + playsinline. -->
+  <video id="catvideo" src="assets/video/gatinhosdancando.mp4"
+         muted loop playsinline preload="auto" crossorigin="anonymous"
+         style="display:none"></video>
+
   <!-- ES modules, sem build: basta servir por HTTP. -->
   <script type="module" src="src/main.js"></script>
 </body>
